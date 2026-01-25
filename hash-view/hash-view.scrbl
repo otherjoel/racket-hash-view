@@ -1,5 +1,5 @@
 #lang scribble/manual
-@(require (for-label racket/base racket/match hash-view hash-view/scribble)
+@(require (for-label racket/base racket/match hash-view hash-view/scribble scribble/manual)
           scribble/example
           "scribble.rkt")
 
@@ -130,7 +130,7 @@ hash-view.
   (nested "Renders like:\n"
           (nested #:style 'inset (nested #:style 'inset e ...))))
 
-@section[#:tag "scribble"]{Scribble Documentation Form}
+@section[#:tag "scribble"]{Scribbling Hash Views}
 
 @defmodule[hash-view/scribble]
 
@@ -138,25 +138,30 @@ The @racketmodname[hash-view/scribble] module provides a Scribble documentation
 form for documenting hash-views, similar to how @racket[defstruct] documents
 structs.
 
-@defform[(defhashview name ([field contract] ...) maybe-mutability pre-flow ...)
-         #:grammar ([field-spec [field-id contract-expr]
+@defform[(defhashview maybe-link name (field-spec ...)
+                      maybe-mutability pre-flow ...)
+         #:grammar ([maybe-link (code:line)
+                                (code:line #:link-target? link-target?-expr)]
+                    [field-spec [field-id contract-expr]
                                 [field-id contract-expr #:default default-expr]
                                 [field-id contract-expr #:default/omit default-expr]]
                     [maybe-mutability (code:line)
                                       #:immutable
                                       #:accept-mutable])]{
 
-Similar to @racket[defstruct], but for a hash-view definition. Every field must
-specify a contract.
+Similar to @racket[defstruct], but for documenting a hash-view definition.
 
-Creates cross-reference targets for:
+Unless @racket[link-target?-expr] is specified and produces @racket[#f], all
+identifiers associated with the hash-view are indexed, and also registered so
+that @racket[racket]-typeset uses of those identifiers (with the same
+@racket[for-label] binding) are hyperlinked to this documentation:
+
 @itemlist[#:style 'compact
-  @item{The hash-view name itself}
-  @item{The predicate (@racket[_name]@tt{?})}
-  @item{The constructor (@tt{make-}@racket[_name])}
-  @item{The mutable constructor (@tt{make-mutable-}@racket[_name]),
+  @item{@racketvarfont{name} and its predicate @racketvarfont{name}@litchar{?}}
+  @item{The constructor @litchar{make-}@racketvarfont{name}}
+  @item{The mutable constructor @litchar{make-mutable-}@racketvarfont{name},
         if @racket[#:accept-mutable] or no mutability option is given}
-  @item{Each field accessor (@racket[_name-field])}
+  @item{Each field accessor (@racketvarfont{name-field})}
 ]
 
 Example usage:
@@ -175,16 +180,18 @@ Example usage:
 }|
 
 @doc-render-examples[
-                     @defhashview[point ([x real?] [y real?]) #:immutable]{
+  @defhashview[#:link-target? #f
+               point ([x real?] [y real?]) #:immutable]{
   A 2D point with real-valued coordinates.
-}
+  }
 
-@defhashview[location ([host string?]
-                       [port integer? #:default 80]
-                       [proto symbol? #:default/omit 'tcp])
+  @defhashview[#:link-target? #f
+               location ([host string?]
+                         [port integer? #:default 80]
+                         [proto symbol? #:default/omit 'tcp])
              #:accept-mutable]{
   A network location with host, port, and protocol.
-}]
+  }]
 
 }
 
