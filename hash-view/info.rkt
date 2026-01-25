@@ -3,8 +3,8 @@
 ;; pkg info
 
 (define collection "hash-view")
-(define deps '("base" "rackunit-lib" "hash-view-lib"))
-(define build-deps '("racket-doc" "scribble-lib"))
+(define deps '("base" "rackunit-lib" "hash-view-lib" "scribble-lib"))
+(define build-deps '("racket-doc"))
 (define implies '("hash-view-lib"))
 (define pkg-authors '(ryanc))
 

@@ -1,6 +1,7 @@
 #lang scribble/manual
-@(require (for-label racket/base racket/match hash-view)
-          scribble/example)
+@(require (for-label racket/base racket/match hash-view hash-view/scribble)
+          scribble/example
+          "scribble.rkt")
 
 @title[#:version "1.0"]{hash-view: Struct-like Views of Hashes}
 @author[@author+email["Ryan Culpepper" "ryanc@racket-lang.org"]]
@@ -122,6 +123,69 @@ behavior defaults to the @racket[#:accept-mutable] behavior.
 
 Like @racket[struct-out] but provides the identifiers associated with the given
 hash-view.
+}
+
+@; ------------------------------------------------------------
+@(define-syntax-rule (doc-render-examples e ...)
+  (nested "Renders like:\n"
+          (nested #:style 'inset (nested #:style 'inset e ...))))
+
+@section[#:tag "scribble"]{Scribble Documentation Form}
+
+@defmodule[hash-view/scribble]
+
+The @racketmodname[hash-view/scribble] module provides a Scribble documentation
+form for documenting hash-views, similar to how @racket[defstruct] documents
+structs.
+
+@defform[(defhashview name ([field contract] ...) maybe-mutability pre-flow ...)
+         #:grammar ([field-spec [field-id contract-expr]
+                                [field-id contract-expr #:default default-expr]
+                                [field-id contract-expr #:default/omit default-expr]]
+                    [maybe-mutability (code:line)
+                                      #:immutable
+                                      #:accept-mutable])]{
+
+Similar to @racket[defstruct], but for a hash-view definition. Every field must
+specify a contract.
+
+Creates cross-reference targets for:
+@itemlist[#:style 'compact
+  @item{The hash-view name itself}
+  @item{The predicate (@racket[_name]@tt{?})}
+  @item{The constructor (@tt{make-}@racket[_name])}
+  @item{The mutable constructor (@tt{make-mutable-}@racket[_name]),
+        if @racket[#:accept-mutable] or no mutability option is given}
+  @item{Each field accessor (@racket[_name-field])}
+]
+
+Example usage:
+@codeblock[#:keep-lang-line? #f]|{
+#lang scribble/manual
+@defhashview[point ([x real?] [y real?]) #:immutable]{
+  A 2D point with real-valued coordinates.
+}
+
+@defhashview[location ([host string?]
+                       [port integer? #:default 80]
+                       [proto symbol? #:default/omit 'tcp])
+             #:accept-mutable]{
+  A network location with host, port, and protocol.
+}
+}|
+
+@doc-render-examples[
+                     @defhashview[point ([x real?] [y real?]) #:immutable]{
+  A 2D point with real-valued coordinates.
+}
+
+@defhashview[location ([host string?]
+                       [port integer? #:default 80]
+                       [proto symbol? #:default/omit 'tcp])
+             #:accept-mutable]{
+  A network location with host, port, and protocol.
+}]
+
 }
 
 @(close-eval the-eval)
