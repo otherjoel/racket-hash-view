@@ -85,7 +85,9 @@
 
 (define-syntax (defhashview stx)
   (syntax-parse stx
-    [(_ name:id (fld:field-spec ...)
+    [(_ (~optional (~seq #:link-target? link-target?-expr)
+                   #:defaults ([link-target?-expr #'#t]))
+        name:id (fld:field-spec ...)
         (~optional (~or* (~and #:immutable immutable-kw)
                          (~and #:accept-mutable accept-mutable-kw)))
         desc ...)
@@ -96,7 +98,8 @@
        #'(with-togetherable-racket-variables
           ()
           ()
-          (*defhashview (quote-syntax/loc name)
+          (*defhashview link-target?-expr
+                        (quote-syntax/loc name)
                         'name
                         (list (list 'fld.name fld.default-mode) ...)
                         (list (lambda () (racketblock0 fld.contract)) ...)
@@ -107,7 +110,7 @@
 ;; ============================================================
 ;; Runtime function: *defhashview
 
-(define (*defhashview stx-id name fields field-contracts field-defaults mutability content-thunk)
+(define (*defhashview link? stx-id name fields field-contracts field-defaults mutability content-thunk)
   (define max-proto-width (current-display-width))
 
   (define (field-name f) (car f))
@@ -135,16 +138,20 @@
 
   ;; Build the name element with cross-reference targets
   (define the-name
-    (let ([target-maker (id-to-target-maker stx-id #t)])
-      (define content (annote-exporting-library (to-element #:defn? #t stx-id)))
-      (define ref-content (to-element stx-id))
-      (if target-maker
-          (make-target-element*
-           (lambda (s c t) (make-toc-target2-element s c t ref-content))
-           stx-id
-           content
-           target-wrappers)
-          content)))
+    (cond
+      [link?
+       (define target-maker (id-to-target-maker stx-id #t))
+       (define content (annote-exporting-library (to-element #:defn? #t stx-id)))
+       (define ref-content (to-element stx-id))
+       (if target-maker
+           (make-target-element*
+            (lambda (s c t) (make-toc-target2-element s c t ref-content))
+            stx-id
+            content
+            target-wrappers)
+           content)]
+      [else
+       (to-element #:defn? #t stx-id)]))
 
   ;; Compute width for single-line format
   (define short-width
