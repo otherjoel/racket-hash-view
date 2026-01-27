@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require racket/string
+(require racket/list
+         racket/string
          scribble/manual
          scribble/struct
          scribble/basic
@@ -120,24 +121,34 @@
   (define (field-default-mode f) (cadr f))  ; #f, 'default, or 'default/omit
   (define (sym-length s) (string-length (symbol->string s)))
 
-  ;; Compute field view (symbol or [symbol] for optional)
+  ;; Compute field view for single-line format: symbol or [symbol #:default ....] for optional
   (define (field-view f)
     (define fname (field-name f))
-    (if (field-default-mode f)
-        (make-shaped-parens (list fname) #\[)
-        fname))
+    (define mode (field-default-mode f))
+    (cond
+      [(not mode) fname]
+      [(eq? mode 'default)
+       (make-shaped-parens (list fname '#:default '....) #\[)]
+      [(eq? mode 'default/omit)
+       (make-shaped-parens (list fname '#:default/omit '....) #\[)]))
 
-  ;; Create cross-reference targets
-  (define target-wrappers
-    (list* (list 'info name)
-           (list 'predicate name '?)
-           (list 'constructor 'make- name)
-           (append
-            (if (eq? mutability 'accept-mutable)
-                (list (list 'constructor 'make-mutable- name))
-                null)
-            (for/list ([f (in-list fields)])
-              (list 'accessor name '- (field-name f))))))
+  ;; For multi-line format: opening part of field (name, with [ for optional)
+  (define (field-open f)
+    (define fname (field-name f))
+    (define mode (field-default-mode f))
+    (if mode
+        (make-element #f (list (racketparenfont "[") (to-element fname)))
+        (to-element fname)))
+
+  ;; For multi-line format: closing part of optional field (#:keyword ....])
+  ;; Returns #f for required fields
+  (define (field-keyword-line f)
+    (define mode (field-default-mode f))
+    (and mode
+         (make-element #f (list (to-element (if (eq? mode 'default) '#:default '#:default/omit))
+                                spacer
+                                (to-element '....)
+                                (racketparenfont "]")))))
 
   ;; Build the name element with cross-reference targets
   (define the-name
@@ -146,6 +157,16 @@
        (define target-maker (id-to-target-maker stx-id #t))
        (define content (annote-exporting-library (to-element #:defn? #t stx-id)))
        (define ref-content (to-element stx-id))
+       (define target-wrappers
+         (list* (list 'info name)
+                (list 'predicate name '?)
+                (list 'constructor 'make- name)
+                (append
+                 (if (eq? mutability 'accept-mutable)
+                     (list (list 'constructor 'make-mutable- name))
+                     null)
+                 (for/list ([f (in-list fields)])
+                   (list 'accessor name '- (field-name f))))))
        (if target-maker
            (make-target-element*
             (lambda (s c t) (make-toc-target2-element s c t ref-content))
@@ -167,7 +188,10 @@
            (+ (sub1 (length fields))  ; spaces between fields
               (for/sum ([f (in-list fields)])
                 (+ (sym-length (field-name f))
-                   (if (field-default-mode f) 2 0)))))  ; brackets for optional
+                   (case (field-default-mode f)
+                     [(#f) 0]                    ; required field
+                     [(default) (+ 2 1 8 1 4)]   ; [name #:default ....]
+                     [(default/omit) (+ 2 1 13 1 4)])))))
        (if (eq? mutability 'immutable) 11 0)))  ; " #:immutable"
 
   ;; Should we use multi-line layout?
@@ -206,6 +230,41 @@
        (define immutable-follows? (eq? mutability 'immutable))
        (define closing-parens
          (racketparenfont (if immutable-follows? ")" "))")))
+
+       ;; Helper: convert field to item list (1 item for required, 2 for optional)
+       (define (field->items f)
+         (if (field-default-mode f)
+             (list (list 'open f) (list 'keyword f))
+             (list (list 'open f))))
+
+       ;; Determine which item gets the closing parens
+       (define last-item-index
+         (sub1 (for/sum ([f (in-list fields)])
+                 (if (field-default-mode f) 2 1))))
+
+       ;; Helper to render a field item
+       (define (render-item item idx)
+         (define type (car item))
+         (define f (cadr item))
+         (define last? (and (= idx last-item-index) (not immutable-follows?)))
+         (define close (if last? closing-parens ""))
+         (cond
+           [(eq? type 'open)
+            (make-element 'no-break
+                          (list (field-open f) close))]
+           [(eq? type 'keyword)
+            (make-element 'no-break
+                          (list spacer (field-keyword-line f) close))]))
+
+       ;; First field's items (at least 1, possibly 2 if optional)
+       (define first-field (car fields))
+       (define first-field-items (field->items first-field))
+       (define remaining-items
+         (if (null? (cdr fields))
+             (cdr first-field-items)  ; just keyword row if first field is optional
+             (append (cdr first-field-items)
+                     (append-map field->items (cdr fields)))))
+
        (list
         (list
          ((add-background-label "hash-view")
@@ -213,7 +272,7 @@
            (make-table
             #f
             (append
-             ;; First row: "(hash-view name" and possibly "(" and first field
+             ;; First row: "(hash-view name" and possibly "(" and first field-open
              (list
               (append
                (list (to-flow (make-element #f (list (racketparenfont "(")
@@ -222,43 +281,32 @@
                (if split-field-line?
                    ;; Just the name on first line
                    (list (to-flow (make-element 'no-break the-name)))
-                   ;; Name, "(", and first field on first line
+                   ;; Name, "(", and first field-open on first line
                    (list (to-flow (make-element 'no-break the-name))
                          (to-flow (make-element #f (list spacer (racketparenfont "("))))
-                         (to-flow (make-element
-                                   'no-break
-                                   (let ([f (to-element (field-view (car fields)))])
-                                     (if (null? (cdr fields))
-                                         (list f closing-parens)
-                                         f))))))))
+                         (to-flow (render-item (car first-field-items) 0))))))
+
              ;; First field on its own line (if split)
              (if split-field-line?
                  (list
                   (list flow-spacer flow-spacer
                         (to-flow (make-element
-                                  'no-break
+                                  #f
                                   (list (racketparenfont "(")
-                                        (let ([f (to-element (field-view (car fields)))])
-                                          (if (null? (cdr fields))
-                                              (list f closing-parens)
-                                              f)))))))
+                                        (render-item (car first-field-items) 0))))))
                  null)
-             ;; Remaining fields
-             (let* ([remaining (cdr fields)]
-                    [last-index (sub1 (length remaining))])
-               (for/list ([f (in-list remaining)]
-                          [i (in-naturals)])
-                 (define last? (= i last-index))
-                 (append
-                  (list flow-spacer flow-spacer)
-                  (if split-field-line? null (list flow-spacer flow-spacer))
-                  (list (to-flow (make-element
-                                  'no-break
-                                  (list (if split-field-line? spacer null)
-                                        (let ([fv (to-element (field-view f))])
-                                          (if last?
-                                              (list fv closing-parens)
-                                              fv)))))))))
+
+             ;; Remaining items (keyword lines for first field + all items for other fields)
+             (for/list ([item (in-list remaining-items)]
+                        [i (in-naturals 1)])
+               (append
+                (list flow-spacer flow-spacer)
+                (if split-field-line? null (list flow-spacer flow-spacer))
+                (list (to-flow (make-element
+                                #f
+                                (list (if split-field-line? spacer null)
+                                      (render-item item i)))))))
+
              ;; #:immutable keyword row (if needed)
              (if immutable-follows?
                  (list
@@ -283,7 +331,6 @@
                  [fc (in-list field-contracts)]
                  [fd (in-list field-defaults)])
         (define fname (field-name f))
-        (define default-mode (field-default-mode f))
         (list
          (make-flow
           (list
@@ -299,9 +346,7 @@
                     (make-flow (list (fc))))
               (if fd
                   (list flow-spacer
-                        (to-flow (case default-mode
-                                   [(default) (racket #:default)]
-                                   [(default/omit) (racket #:default/omit)]))
+                        (to-flow "=")
                         flow-spacer
                         (make-flow (list (fd))))
                   null)))))))))))
