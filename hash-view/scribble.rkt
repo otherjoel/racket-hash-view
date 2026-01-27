@@ -8,7 +8,6 @@
          scribble/manual-struct       ; make-exported-index-desc*
          scribble/private/manual-vars    ; add-background-label, boxed-style, etc.
          scribble/private/manual-bind    ; id-to-target-maker, annote-exporting-library
-         scribble/private/manual-utils   ; flow-spacer, spacer, to-flow, etc.
          scribble/private/qsloc          ; quote-syntax/loc
          (for-syntax racket/base
                      syntax/parse
@@ -17,6 +16,10 @@
                     hash-view))
 
 (provide defhashview)
+
+(define spacer (hspace 1))
+(define (to-flow e) (list (make-omitable-paragraph (list e))))
+(define flow-spacer (to-flow spacer))
 
 ;; ============================================================
 ;; Helper: make-target-element* (adapted from scribble/private/manual-proc.rkt)
