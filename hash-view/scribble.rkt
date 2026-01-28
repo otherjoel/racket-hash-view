@@ -121,6 +121,19 @@
   (define (field-default-mode f) (cadr f))  ; #f, 'default, or 'default/omit
   (define (sym-length s) (string-length (symbol->string s)))
 
+  ;; Width of optional field if combined on one line: [name #:keyword ....]
+  (define (optional-field-combined-width f)
+    (+ 1  ; [
+       (sym-length (field-name f))
+       1  ; space
+       (if (eq? (field-default-mode f) 'default) 8 13)  ; #:default or #:default/omit
+       1  ; space
+       4  ; ....
+       1)) ; ]
+
+  ;; Threshold for combining optional field on one line
+  (define combine-threshold 50)
+
   ;; Compute field view for single-line format: symbol or [symbol #:default ....] for optional
   (define (field-view f)
     (define fname (field-name f))
@@ -139,6 +152,19 @@
     (if mode
         (make-element #f (list (racketparenfont "[") (to-element fname)))
         (to-element fname)))
+
+  ;; For multi-line format: render optional field as single combined element
+  (define (field-combined f)
+    (define fname (field-name f))
+    (define mode (field-default-mode f))
+    (make-element #f
+      (list (racketparenfont "[")
+            (to-element fname)
+            spacer
+            (to-element (if (eq? mode 'default) '#:default '#:default/omit))
+            spacer
+            (to-element '....)
+            (racketparenfont "]"))))
 
   ;; For multi-line format: closing part of optional field (#:keyword ....])
   ;; Returns #f for required fields
@@ -195,7 +221,8 @@
        (if (eq? mutability 'immutable) 11 0)))  ; " #:immutable"
 
   ;; Should we use multi-line layout?
-  (define short? (short-width . < . max-proto-width))
+  ;; Reserve space for the "hash-view" label in the upper right
+  (define short? (short-width . < . (- max-proto-width 15)))
 
   ;; For multi-line: should fields start on a new line after the name?
   (define split-field-line?
@@ -231,11 +258,15 @@
        (define closing-parens
          (racketparenfont (if immutable-follows? ")" "))")))
 
-       ;; Helper: convert field to item list (1 item for required, 2 for optional)
+       ;; Helper: convert field to item list (1 item for required, 1-2 for optional)
        (define (field->items f)
-         (if (field-default-mode f)
-             (list (list 'open f) (list 'keyword f))
-             (list (list 'open f))))
+         (cond
+           [(not (field-default-mode f))
+            (list (list 'open f))]
+           [((optional-field-combined-width f) . <= . combine-threshold)
+            (list (list 'combined f))]
+           [else
+            (list (list 'open f) (list 'keyword f))]))
 
        ;; Determine which item gets the closing parens
        (define last-item-index
@@ -252,6 +283,9 @@
            [(eq? type 'open)
             (make-element 'no-break
                           (list (field-open f) close))]
+           [(eq? type 'combined)
+            (make-element 'no-break
+                          (list (field-combined f) close))]
            [(eq? type 'keyword)
             (make-element 'no-break
                           (list spacer (field-keyword-line f) close))]))
