@@ -268,10 +268,17 @@
            [else
             (list (list 'open f) (list 'keyword f))]))
 
+       ;; First field's items (at least 1, possibly 2 if optional and not combined)
+       (define first-field (car fields))
+       (define first-field-items (field->items first-field))
+       (define remaining-items
+         (if (null? (cdr fields))
+             (cdr first-field-items)  ; just keyword row if first field is optional
+             (append (cdr first-field-items)
+                     (append-map field->items (cdr fields)))))
+
        ;; Determine which item gets the closing parens
-       (define last-item-index
-         (sub1 (for/sum ([f (in-list fields)])
-                 (if (field-default-mode f) 2 1))))
+       (define last-item-index (length remaining-items))
 
        ;; Helper to render a field item
        (define (render-item item idx)
@@ -289,15 +296,6 @@
            [(eq? type 'keyword)
             (make-element 'no-break
                           (list spacer (field-keyword-line f) close))]))
-
-       ;; First field's items (at least 1, possibly 2 if optional)
-       (define first-field (car fields))
-       (define first-field-items (field->items first-field))
-       (define remaining-items
-         (if (null? (cdr fields))
-             (cdr first-field-items)  ; just keyword row if first field is optional
-             (append (cdr first-field-items)
-                     (append-map field->items (cdr fields)))))
 
        (list
         (list
